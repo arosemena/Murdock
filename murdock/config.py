@@ -37,7 +37,10 @@ class Settings(BaseSettings):
     info_cache_ttl_seconds: float = Field(default=60.0)
 
     # Web UI
-    web_host: str = Field(default="0.0.0.0")
+    # The web UI and its API have no login and answer CORS "*", and
+    # /api/backup hands out the HA token and every voice sample: localhost
+    # only unless WEB_HOST says otherwise.
+    web_host: str = Field(default="127.0.0.1")
     web_port: int = Field(default=8099)
 
     # Paths
