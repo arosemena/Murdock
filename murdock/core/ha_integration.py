@@ -32,6 +32,7 @@ class HomeAssistantClient:
         nearest_entity: Optional[str] = None,
         role_entity: Optional[str] = None,
         timeout: float = 3.0,
+        fire_events: bool = True,
     ) -> None:
         self.base_url = base_url.rstrip("/") if base_url else None
         self.token = token
@@ -42,6 +43,8 @@ class HomeAssistantClient:
         self.nearest_entity = nearest_entity
         self.role_entity = role_entity
         self.timeout = timeout
+        # False: never POST /api/events, which a non-admin token is refused.
+        self.fire_events = fire_events
         self._client: Optional[httpx.AsyncClient] = None
 
     @property
@@ -143,7 +146,7 @@ class HomeAssistantClient:
         voice_style: Optional[str] = None,
         speakers: Optional[list] = None,
     ) -> None:
-        if not self.configured:
+        if not self.configured or not self.fire_events:
             return
         try:
             client = self._get_client()

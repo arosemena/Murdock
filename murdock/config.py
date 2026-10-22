@@ -228,6 +228,12 @@ class Settings(BaseSettings):
     ha_token: Optional[str] = Field(default=None)
     ha_input_text_entity: str = Field(default="input_text.current_speaker")
     ha_tv_entity: Optional[str] = Field(default=None)
+    # Fire the speaker_recognition_detected event in HA after each
+    # utterance. POST /api/events needs an admin token, so with a
+    # non-admin one every utterance logs a 401 and the event goes
+    # nowhere. Off skips the POST; the helper and the entity pushes
+    # (service calls) are unaffected. charlie-ha sets it false.
+    ha_fire_events: bool = Field(default=True)
 
     # MQTT — recommended integration path. In the HA addon these are
     # auto-wired from the Mosquitto service (services: mqtt:want), so the

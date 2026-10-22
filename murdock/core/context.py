@@ -1759,6 +1759,7 @@ def build_context(settings: Optional[Settings] = None) -> AppContext:
         distance_entity=get_setting(db, "ha_distance_entity") or None,
         nearest_entity=get_setting(db, "ha_nearest_entity") or None,
         role_entity=get_setting(db, "ha_role_entity") or None,
+        fire_events=settings.ha_fire_events,
     )
 
     # MQTT client: DB override first, env (addon-injected / compose) fallback.
