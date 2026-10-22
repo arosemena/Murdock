@@ -102,15 +102,23 @@ class HomeAssistantClient:
             return
         try:
             client = self._get_client()
-            response = await client.post(
-                "/api/services/input_text/set_value",
-                json={"entity_id": self.input_text_entity, "value": speaker_name},
-            )
-            if response.status_code >= 400:
-                _LOGGER.warning(
-                    "HA set_value failed (%d): %s",
-                    response.status_code, response.text[:200],
+            # Blank first, then the value: the same speaker twice in a row is
+            # then still a state change, so the entity's timestamps (and the
+            # copy /api/states serves, which a repeated value leaves stale)
+            # say when the last utterance was heard. A reader treats the
+            # blank as no reading; both calls finish before the transcript
+            # goes back.
+            for value in ("", speaker_name):
+                response = await client.post(
+                    "/api/services/input_text/set_value",
+                    json={"entity_id": self.input_text_entity, "value": value},
                 )
+                if response.status_code >= 400:
+                    _LOGGER.warning(
+                        "HA set_value failed (%d): %s",
+                        response.status_code, response.text[:200],
+                    )
+                    return
         except Exception as exc:
             _LOGGER.warning("Could not set current speaker in HA: %s", exc)
 
