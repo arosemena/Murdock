@@ -17,23 +17,30 @@ set -uo pipefail
 MODEL_DIR="${1:-./models}"
 mkdir -p "$MODEL_DIR"
 
-# CAM++ (3D-Speaker iic checkpoint, 192-dim, ~28 MB).
-# Multiple mirrors because HF occasionally returns 500/503 under load and
-# we can't afford to fail the build for a transient CDN hiccup.
+# Each model from one URL pinned to a commit, checked against its SHA256 before
+# it is moved into place. A file that does not match is deleted and the script
+# fails, whatever SKIP_MODEL_DOWNLOAD says: no unverified model is ever loaded.
+#
+# CAM++ (3D-Speaker iic checkpoint, 192-dim, ~28 MB), model-scope/CosyVoice-300M
+# at revision ca4e036d.
 CAMPP_URLS=(
-    "https://huggingface.co/model-scope/CosyVoice-300M/resolve/main/campplus.onnx"
-    "https://huggingface.co/gpustack/CosyVoice-300M-Instruct/resolve/main/campplus.onnx"
-    "https://huggingface.co/FunAudioLLM/CosyVoice2-0.5B/resolve/main/campplus.onnx"
-    "https://huggingface.co/mradermacher/CosyVoice-300M-GGUF/resolve/main/campplus.onnx"
-    "https://hf-mirror.com/model-scope/CosyVoice-300M/resolve/main/campplus.onnx"
-    "https://hf-mirror.com/gpustack/CosyVoice-300M-Instruct/resolve/main/campplus.onnx"
+    "https://huggingface.co/model-scope/CosyVoice-300M/resolve/ca4e036d2db2aa4731cc1747859a68044b6a4694/campplus.onnx"
 )
+CAMPP_SHA256="a6ac6a63997761ae2997373e2ee1c47040854b4b759ea41ec48e4e42df0f4d73"
 
-# Silero VAD v5 — ~2 MB, hosted directly in the upstream GitHub repo.
+# Silero VAD v5 (~2 MB), snakers4/silero-vad at commit bfdc0193.
 SILERO_URLS=(
-    "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx"
-    "https://raw.githubusercontent.com/snakers4/silero-vad/master/src/silero_vad/data/silero_vad.onnx"
+    "https://raw.githubusercontent.com/snakers4/silero-vad/bfdc0193023f121ea5b3cc7b176dbed570a68a59/src/silero_vad/data/silero_vad.onnx"
 )
+SILERO_SHA256="1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3"
+
+sha256_of() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | cut -d' ' -f1
+    else
+        shasum -a 256 "$1" | cut -d' ' -f1
+    fi
+}
 
 # Validate that a file looks like a real ONNX (protobuf) blob.
 # Real ONNX files start with the bytes 08 ?? 12 (ir_version field, varint),
@@ -41,7 +48,14 @@ SILERO_URLS=(
 validate_onnx() {
     local path="$1"
     local min_bytes="$2"
+    local sha256="$3"
     if [ ! -s "$path" ]; then
+        return 1
+    fi
+    local got
+    got="$(sha256_of "$path")"
+    if [ "$got" != "$sha256" ]; then
+        echo "  -> SHA256 $got, expected $sha256" >&2
         return 1
     fi
     local size
@@ -83,10 +97,11 @@ try_download() {
 download_with_fallback() {
     local target="$1"
     local min_bytes="$2"
-    shift 2
+    local sha256="$3"
+    shift 3
     local urls=("$@")
 
-    if [ -f "$target" ] && validate_onnx "$target" "$min_bytes"; then
+    if [ -f "$target" ] && validate_onnx "$target" "$min_bytes" "$sha256"; then
         echo "$(basename "$target") already present and valid."
         return 0
     fi
@@ -101,7 +116,7 @@ download_with_fallback() {
             echo "[pass $pass] Downloading $(basename "$target") from $url"
             local tmp="${target}.partial"
             if try_download "$url" "$tmp"; then
-                if validate_onnx "$tmp" "$min_bytes"; then
+                if validate_onnx "$tmp" "$min_bytes" "$sha256"; then
                     mv "$tmp" "$target"
                     local sz
                     sz=$(stat -c %s "$target" 2>/dev/null || stat -f %z "$target")
@@ -127,9 +142,16 @@ download_with_fallback() {
 }
 
 missing=0
-download_with_fallback "$MODEL_DIR/campplus.onnx" 10000000 "${CAMPP_URLS[@]}" \
+for f in campplus.onnx silero_vad.onnx; do
+    # A model already on disk that fails its checksum is not used.
+    if [ -f "$MODEL_DIR/$f" ] && ! validate_onnx "$MODEL_DIR/$f" 1 "$([ "$f" = campplus.onnx ] && echo "$CAMPP_SHA256" || echo "$SILERO_SHA256")"; then
+        echo "ERROR: $MODEL_DIR/$f fails its checksum; deleting it" >&2
+        rm -f "$MODEL_DIR/$f"
+    fi
+done
+download_with_fallback "$MODEL_DIR/campplus.onnx" 10000000 "$CAMPP_SHA256" "${CAMPP_URLS[@]}" \
     || missing=1
-download_with_fallback "$MODEL_DIR/silero_vad.onnx" 500000 "${SILERO_URLS[@]}" \
+download_with_fallback "$MODEL_DIR/silero_vad.onnx" 500000 "$SILERO_SHA256" "${SILERO_URLS[@]}" \
     || missing=1
 
 echo
