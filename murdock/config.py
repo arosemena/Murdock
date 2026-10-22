@@ -37,11 +37,18 @@ class Settings(BaseSettings):
     info_cache_ttl_seconds: float = Field(default=60.0)
 
     # Web UI
-    # The web UI and its API have no login and answer CORS "*", and
     # /api/backup hands out the HA token and every voice sample: localhost
     # only unless WEB_HOST says otherwise.
     web_host: str = Field(default="127.0.0.1")
     web_port: int = Field(default=8099)
+    # A login on the UI and every API route (murdock/api/auth.py): the
+    # password, typed once per browser session, or sent by a script as
+    # "Authorization: Bearer <password>". Empty: no login (upstream's).
+    web_password: Optional[str] = Field(default=None)
+    # Origins another page may call the API from, comma-separated. Empty
+    # (the default): none, the UI's own origin only, which needs no CORS.
+    # "*" is upstream's.
+    web_cors_origins: str = Field(default="")
 
     # Paths
     data_dir: Path = Field(default=Path("/app/data"))

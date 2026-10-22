@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from murdock import __version__
 from murdock.core.context import AppContext
 
+from .auth import install as install_login
 from .routes_backup import router as backup_router
 from .routes_integration import router as integration_router
 from .routes_stt_services import router as stt_services_router
@@ -36,12 +37,21 @@ def create_app(context: AppContext) -> FastAPI:
     )
     app.state.context = context
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # The login (WEB_PASSWORD), then CORS (WEB_CORS_ORIGINS) outside it, so
+    # an allowed origin's preflight is answered before the login asks.
+    settings = context.settings
+    if settings.web_password:
+        install_login(app, settings.web_password)
+    else:
+        _LOGGER.warning("Web UI has no login: set WEB_PASSWORD")
+    origins = [o.strip() for o in settings.web_cors_origins.split(",") if o.strip()]
+    if origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     app.include_router(status_router)
     app.include_router(speakers_router)

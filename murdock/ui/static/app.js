@@ -31,6 +31,11 @@ function apiUrl(path) {
 
 async function api(path, options = {}) {
     const res = await fetch(apiUrl(path), options);
+    // The login (WEB_PASSWORD) ran out: the page reloads onto it.
+    if (res.status === 401) {
+        window.location.reload();
+        throw new Error("login required");
+    }
     if (!res.ok) {
         let detail = res.statusText;
         try {
