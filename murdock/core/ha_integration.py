@@ -235,8 +235,11 @@ class HomeAssistantClient:
         """
         if not self.configured:
             return
-        # Speaker name
-        await self.set_current_speaker(speaker)
+        # Speaker name, or why there is none ("short", "no-speakers",
+        # "unknown", ...), so a reader of the entity can tell an utterance
+        # too short to verify from a voice nobody enrolled. A service call,
+        # so a non-admin token is enough (POST /api/events needs admin).
+        await self.set_current_speaker(speaker if is_known else (reason or speaker))
         # Optional entity pushes
         if self.confidence_entity:
             await self._set_input_number(self.confidence_entity, confidence)
